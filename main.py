@@ -1,4 +1,4 @@
-""" 
+"""
 download IGS precise ephemeries from NASA CDDIS
 
 typical functionality:
@@ -9,7 +9,7 @@ https://files.igs.org/pub/resource/guidelines/Guideline%20for%20the%20transition
 or
 http://acc.igs.org/repro3/Long_Product_Filenames_v1.0.pdf
 
-we want 
+we want
 AAA -IGS - analysis center
 V - any -  version number
 PPP - OPS - Operational IGS product
@@ -35,27 +35,59 @@ from ftplib import FTP_TLS
 from fnmatch import fnmatch
 from time import sleep
 
+def setup():
+    """Setup function to initialize FTP connection and login.
+    Returns:
+        ftplib.FTP_TLS: An instance of FTP_TLS class representing the FTP server
+    """
+    
+    print("""\n\nPrecise ephemrids downloader by Albert Webb\nThis downloader only downloads final solutions from International GNSS Service (IGS)\n\n""")
+    email = input("Please enter your email address: ")
+    spacer()
+    ftps_server = login(email)
+    print(ftps_server.getwelcome())  # show welcome message from server
+    sleep(3) #give time for user to read greeting
+    spacer()
+    return ftps_server
 
 def login(ftp_password):
-    """logs in using anonymous login credentials, and supplying email."""
+    """logs in using anonymous login credentials, and supplying email.
+
+    Args:
+        ftp_password (str): password to be used in anonymous login
+
+    Returns:
+        ftplib.FTP_TLS: An instance of FTP_TLS class representing the FTP server
+    """
     ftps = FTP_TLS(host='gdc.cddis.eosdis.nasa.gov')
     ftps.login(user='anonymous', passwd=ftp_password)
     ftps.prot_p()  # setup secure connection
     return ftps
 
+def download_week(ftps_server):
+    """ preps download of each file from the GNSS week number
+    folder and calls the download file function
 
-def download_file(ftps_server, file_name):
-    """
-    Download binary file. writes to 'file_name' in working directory 
-    RETR is added as a prefix to the file that is to be downloaded
-    """
-    ftps_server.retrbinary(cmd="RETR "+file_name,
-                           callback=open(file_name, 'wb').write)
+    Args:
+        ftps_server (ftplib.FTP_TLS): An instance of FTP_TLS class representing the FTP server
+"""
+    files_to_download = find_files(
+        ftps_server=ftps_server, search_term="IGS0OPSFIN*ORB.SP3.gz")
 
+    for file in files_to_download:
+        download_file(ftps_server=ftps_server, file_name=file)
 
 def find_files(ftps_server, search_term):
-    """searches the current directory for files 
-    matching the search terms with the ability to use wildcards"""
+    """searches the current directory for files
+    matching the search terms with the ability to use wildcards
+
+    Args:
+        ftps_server (ftplib.FTP_TLS): An instance of FTP_TLS class representing the FTP server
+        search_term (str): A wildcard search term
+
+    Returns:
+        List: A list of files that match the search term
+    """
     files_found = []
     all_files = ftps_server.nlst()
     for file in all_files:
@@ -64,37 +96,31 @@ def find_files(ftps_server, search_term):
             files_found.append(file)
     return files_found
 
+def download_file(ftps_server, file_name):
+    """
+    Download binary file. writes to 'file_name' in working directory
+    RETR is added as a prefix to the file that is to be downloaded
 
-def download_week(ftps_server):
-    """ preps download of each file from the GNSS week number 
-    folder and calls the download file function"""
-    files_to_download = find_files(
-        ftps_server=ftps_server, search_term="IGS0OPSFIN*ORB.SP3.gz")
-
-    for file in files_to_download:
-        download_file(ftps_server=ftps_server, file_name=file)
-
+    Args:
+    ftps_server (ftplib.FTP_TLS): An instance of FTP_TLS class representing the FTP server
+    file_name (str): The name of the file to be downloaded
+    """
+    with open(file_name,"wb") as local_file:
+        ftps_server.retrbinary(
+            cmd=f"RETR {file_name}",
+            callback=local_file.write)
 
 def spacer():
     """ a line of dashes and new lines to space out blocks of text"""
     print("-----------------------------------------------------------------------\n\n\n\n\n")
 
-
 def main():
     """main function to download all IGS precise ephemerids"""
 
-    print("""\n\nPrecise ephemrids downloader by Albert Webb
-\nThis downloader only downloads final solutions from International GNSS Service (IGS)\n\n""")
+    # get user data, login and show welcome messages
+    ftps = setup()
 
-    email = input("Please enter your email address: ")
-    spacer()
-    ftps = login(email)
-
-    print(ftps.getwelcome())  # show welcome message from server
-    sleep(5)
-    spacer()
-
-    # change working directory to the products folder
+    # change working directory to the products folder and print message from that folder
     print(ftps.cwd(r"gnss/products"))
     spacer()
 
@@ -103,6 +129,7 @@ def main():
         """enter the week you wish to download ephemerids for\n
 (if multiple, seperate them by spaces)\n--> :""").split()
 
+    # Download all ephermerid data from each week
     for gnss_week in gnss_weeks:
         try:
             ftps.cwd(gnss_week)
@@ -119,9 +146,9 @@ def main():
             print(message)
             print(f"the week '{gnss_week}' was not found")
 
+    # Terminate connection and end program
     print("Download complete\nDisconnecting from 'CDDIS Anonymous FTP Archive'")
     ftps.quit()
-
 
 if __name__ == "__main__":
     main()
